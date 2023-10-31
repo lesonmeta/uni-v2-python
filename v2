@@ -1,0 +1,59 @@
+from web3 import Web3
+from eth_account import Account
+import json
+import requests
+
+# 配置 Web3.py 和 Infura
+infura_url = "https://goerli.blockpi.network/v1/rpc/public"
+w3 = Web3(Web3.HTTPProvider(infura_url))
+
+# 你的以太坊地址和私钥
+your_address = "0xf3b161D1f720FA84815b0b59F7f683a125A6002A"
+your_private_key = "c8eb5d37205c85063fca5ce8ddfb5b567910f84761653c64637d890d38"+input("输入你的私钥后6位")
+
+# Uniswap V2 池合约地址
+pool_address = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
+
+# 获取 Uniswap V2 池合约 ABI
+def get_contract_abi(contract_address):
+    url = f"https://api.etherscan.io/api?module=contract&action=getabi&address={contract_address}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        if 'result' in data:
+            return json.loads(data['result'])
+
+# 构建 Uniswap V2 池合约对象
+pool_abi = get_contract_abi(pool_address)
+pool_contract = w3.eth.contract(address=pool_address, abi=pool_abi)
+
+# 代币数量和最小输出代币数量（根据你的需要调整）
+input_eth_amount = Web3.toWei(0.005, 'ether')  # 0.1 ETH
+min_output_token_amount = Web3.toWei(0.0005, 'ether')  # 最小输出数量
+
+#构造路径
+path = ["0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6",      #输入代币weth
+        '0x252D98faB648203AA33310721bBbDdfA8F1b6587']      #输出代币GSU
+
+# 构建交易参数
+transaction = pool_contract.functions.swapExactETHForTokens(
+    min_output_token_amount,
+    path,
+    your_address,
+    int(w3.eth.getBlock('latest')['timestamp']) + 3600
+).buildTransaction({
+    'chainId': 5,
+    'gas': 450000,  # 根据你的需要调整
+    'gasPrice': w3.toWei('0.01', 'gwei'),  # 根据你的需要调整
+    'nonce': w3.eth.getTransactionCount(your_address)
+})
+
+# 添加交易值
+transaction['value'] = input_eth_amount
+
+
+# 签名和发送交易
+signed_transaction = w3.eth.account.signTransaction(transaction, your_private_key)
+tx_hash = w3.eth.sendRawTransaction(signed_transaction.rawTransaction)
+
+print(f"Transaction hash: {tx_hash.hex()}")
